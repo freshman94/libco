@@ -32,12 +32,14 @@ public:
 #define comac_args_seqs() 7,6,5,4,3,2,1,0
 #define comac_join_1( x,y ) x##y
 
+//获取参数个数，运行 comac_argc(a,b,c,d) 输出 4
 #define comac_argc( ... ) comac_get_args_cnt( 0,##__VA_ARGS__,comac_args_seqs() )
 #define comac_join( x,y) comac_join_1( x,y )
 
 //-- 1.2 repeat
+//主要用于定义重复操作
 #define repeat_0( fun,a,... ) 
-#define repeat_1( fun,a,... ) fun( 1,a,__VA_ARGS__ ) repeat_0( fun,__VA_ARGS__ )
+#define repeat_1( fun,a,... ) fun( 1,a,##__VA_ARGS__ ) repeat_0( fun,__VA_ARGS__ )	//加上##，去除多余的逗号
 #define repeat_2( fun,a,... ) fun( 2,a,__VA_ARGS__ ) repeat_1( fun,__VA_ARGS__ )
 #define repeat_3( fun,a,... ) fun( 3,a,__VA_ARGS__ ) repeat_2( fun,__VA_ARGS__ )
 #define repeat_4( fun,a,... ) fun( 4,a,__VA_ARGS__ ) repeat_3( fun,__VA_ARGS__ )
@@ -48,17 +50,18 @@ public:
 
 //2.implement
 #if __cplusplus <= 199711L
-#define decl_typeof( i,a,... ) typedef typeof( a ) typeof_##a;
+#define decl_typeof( i,a,... ) typedef typeof( a ) typeof_##a;	//获取变量a的类型
 #else
 #define decl_typeof( i,a,... ) typedef decltype( a ) typeof_##a;
 #endif
-#define impl_typeof( i,a,... ) typeof_##a & a;
-#define impl_typeof_cpy( i,a,... ) typeof_##a a;
-#define con_param_typeof( i,a,... ) typeof_##a & a##r,
-#define param_init_typeof( i,a,... ) a(a##r),
+#define impl_typeof( i,a,... ) typeof_##a & a;	//创建一个和变量a的类型相同的引用。
+#define impl_typeof_cpy( i,a,... ) typeof_##a a;	//用于创建一个和变量a类型相同的变量。
+#define con_param_typeof( i,a,... ) typeof_##a & a##r,	//用于生成类构造函数形参。
+#define param_init_typeof( i,a,... ) a(a##r),	//用于生成类构造函数初始化列表。
 
 
 //2.1 reference
+//生成类type_##name
 
 #define co_ref( name,... )\
 repeat( comac_argc(__VA_ARGS__) ,decl_typeof,__VA_ARGS__ )\
@@ -75,6 +78,7 @@ public:\
 
 
 //2.2 function
+//生成类name
 
 #define co_func(name,...)\
 repeat( comac_argc(__VA_ARGS__) ,decl_typeof,__VA_ARGS__ )\

@@ -117,7 +117,7 @@ static void *readwrite_routine( void *arg )
 			SetAddr(endpoint->ip, endpoint->port, addr);
 			ret = connect(fd,(struct sockaddr*)&addr,sizeof(addr));
 						
-			if ( errno == EALREADY || errno == EINPROGRESS )
+			if ( errno == EALREADY || errno == EINPROGRESS )	//已经连接或者正在操作
 			{       
 				struct pollfd pf = { 0 };
 				pf.fd = fd;
@@ -127,7 +127,7 @@ static void *readwrite_routine( void *arg )
 				int error = 0;
 				uint32_t socklen = sizeof(error);
 				errno = 0;
-				ret = getsockopt(fd, SOL_SOCKET, SO_ERROR,(void *)&error,  &socklen);
+				ret = getsockopt(fd, SOL_SOCKET, SO_ERROR,(void *)&error,  &socklen);	//获取待处理错误的信息
 				if ( ret == -1 ) 
 				{       
 					//printf("getsockopt ERROR ret %d %d:%s\n", ret, errno, strerror(errno));

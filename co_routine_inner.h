@@ -29,46 +29,46 @@ struct stCoSpec_t
 
 struct stStackMem_t
 {
-	stCoRoutine_t* occupy_co;
-	int stack_size;
-	char* stack_bp; //stack_buffer + stack_size
-	char* stack_buffer;
+	stCoRoutine_t* occupy_co;	// 正使用该共享栈的协程
+	int stack_size;		// 该共享栈的大小
+	char* stack_bp; //stack_buffer + stack_size (共享栈基址)
+	char* stack_buffer;		// 共享栈的内存
 
 };
 
 struct stShareStack_t
 {
-	unsigned int alloc_idx;
-	int stack_size;
-	int count;
-	stStackMem_t** stack_array;
+	unsigned int alloc_idx;		// 用于分配共享栈(RoundRobin)
+	int stack_size;		// 共享栈的大小
+	int count;		// 共享栈的数目
+	stStackMem_t** stack_array;		// 协程组
 };
 
 
 
 struct stCoRoutine_t
 {
-	stCoRoutineEnv_t *env;
-	pfn_co_routine_t pfn;
-	void *arg;
-	coctx_t ctx;
+	stCoRoutineEnv_t *env;	// 协程运行的环境
+	pfn_co_routine_t pfn;	// 协程所封装的回调函数
+	void *arg;				// 回调函数的参数
+	coctx_t ctx;			// 协程上下文，保存当前协程让出cpu时 寄存器的状态
 
-	char cStart;
-	char cEnd;
-	char cIsMain;
-	char cEnableSysHook;
-	char cIsShareStack;
+	char cStart;			// 标志：协程上下文是否被初始化，若否，则使用coctx_make初始化ctx
+	char cEnd;				// 标志： 协程回调函数是否执行完毕
+	char cIsMain;			// 标志：是否是主协程
+	char cEnableSysHook;	// 标志：是否使用系统函数hook
+	char cIsShareStack;		// 标志：是否使用了共享栈
 
-	void *pvEnv;
+	void *pvEnv;			// 协程当前的系统环境变量(hook开启时使用)
 
 	//char sRunStack[ 1024 * 128 ];
-	stStackMem_t* stack_mem;
+	stStackMem_t* stack_mem;	// 协程当前使用的栈内存空间 ,当使用共享栈的时候，指向共享的栈内存
 
 
 	//save satck buffer while confilct on same stack_buffer;
-	char* stack_sp; 
-	unsigned int save_size;
-	char* save_buffer;
+	char* stack_sp;				// 协程切换时, 保存当前的rsp地址，即当前栈顶地址
+	unsigned int save_size;		// 协程切换时, 保存的栈内存大小
+	char* save_buffer;			// 协程切换时，将stack_mem拷贝到此，保存当时的栈数据
 
 	stCoSpec_t aSpec[1024];
 

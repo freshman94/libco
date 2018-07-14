@@ -1,0 +1,79 @@
+#include "co_closure.h"
+#include <stdio.h>
+ 
+int main()
+{
+    int a = 100;	
+    co_ref(ref, a);
+ 
+    co_func(f, ref)
+    {
+        printf("hello, world!\n");
+    }
+    co_func_end;
+}
+
+－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－
+
+//显示宏展开的结果
+
+#include <stdio.h>
+#include "co_closure.h"
+
+#define MACRO_STRING(...)     #__VA_ARGS__
+#define MACRO_EXPAND(x)     MACRO_STRING(x)
+
+int  main() {
+       	int para = 1;
+       	printf("%s\n", MACRO_EXPAND(decl_typeof(1,para)));
+       	printf("%s\n", MACRO_EXPAND(con_param_typeof(1, para)));
+       	printf("%s\n", MACRO_EXPAND(param_init_typeof(1, para)));
+       	printf("%s\n", MACRO_EXPAND(co_ref(ref, a,b,c)));
+        printf("%s\n", MACRO_EXPAND(co_func(ref, a,b,c)));
+
+	return 0;
+}
+
+－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－
+运行结果：
+
+typedef typeof( para ) typeof_para;
+typeof_para & parar,
+para(parar),
+
+typedef typeof( a ) typeof_a; 
+class type_ref{
+public: 
+	typeof_a & a; 
+	int _member_cnt; 
+	type_ref( typeof_a & ar, ... ): a(ar), _member_cnt(1) {}
+} ref( a ) ;
+
+
+typedef typeof( a ) typeof_a; 
+typedef typeof( b ) typeof_b; 
+typedef typeof( c ) typeof_c; 
+class type_ref{
+public: 
+	typeof_a & a; 
+	typeof_b & b; 
+	typeof_c & c; 
+	int _member_cnt; 
+	type_ref( typeof_a & ar, typeof_b & br, typeof_c & cr, ... ): 
+		a(ar), b(br), c(cr), _member_cnt(3) {}
+} ref( a,b,c ) ;
+
+
+typedef typeof( a ) typeof_a; 
+typedef typeof( b ) typeof_b; 
+typedef typeof( c ) typeof_c; 
+class ref:public stCoClosure_t{
+public: 
+	typeof_a a; 
+	typeof_b b; 
+	typeof_c c; 
+	int _member_cnt;
+public:
+	 ref( typeof_a & ar, typeof_b & br, typeof_c & cr, ... ): 
+		a(ar), b(br), c(cr), _member_cnt(3) {} 
+	void exec()

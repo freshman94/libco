@@ -68,16 +68,22 @@ static void *readwrite_routine( void *arg )
 
 	task_t *co = (task_t*)arg;
 	char buf[ 1024 * 16 ];
-	for(;;)
+	for(;;)	
 	{
-		if( -1 == co->fd )
+		// 初始化阶段，fd为-1，表示当前没有就绪的任务需要处理
+		if( -1 == co->fd )				
 		{
-			g_readwrite.push( co );
+			// 当前协程入队列。这个动作的意义在于，当有任务要处理时，
+			// 从g_readwrite里依次取出，并分配任务给他们去执行。
+			g_readwrite.push( co );		
+			// 挂起当前协程，让出执行权给其他协程。
+			// 原则很简单，就是让上次挂起的协程执行，可以认为是返回到上次执行的运行点。
 			co_yield_ct();
 			continue;
 		}
 
-		int fd = co->fd;
+		//处理后，恢复为初始状态
+		int fd = co->fd;	
 		co->fd = -1;
 
 		for(;;)
@@ -114,6 +120,8 @@ static void *accept_routine( void * )
 	for(;;)
 	{
 		//printf("pid %ld g_readwrite.size %ld\n",getpid(),g_readwrite.size());
+
+		// 如果工作协程队列为空，就等待1秒后，重试
 		if( g_readwrite.empty() )
 		{
 			printf("empty\n"); //sleep
@@ -129,24 +137,28 @@ static void *accept_routine( void * )
 		socklen_t len = sizeof(addr);
 
 		int fd = co_accept(g_listen_fd, (struct sockaddr *)&addr, &len);
+		// 未就绪，等待下次事件继续处理
 		if( fd < 0 )
 		{
 			struct pollfd pf = { 0 };
 			pf.fd = g_listen_fd;
 			pf.events = (POLLIN|POLLERR|POLLHUP);
+			//　当前运行在accept协程，co_poll会在等待事件的时候交出cpu，回到主进程
 			co_poll( co_get_epoll_ct(),&pf,1,1000 );
 			continue;
 		}
+		// 这里工作协程用尽，直接关闭当前连接...
 		if( g_readwrite.empty() )
 		{
 			close( fd );
 			continue;
 		}
+		// 弹出一个协程，去处理新连接
 		SetNonBlock( fd );
 		task_t *co = g_readwrite.top();
 		co->fd = fd;
 		g_readwrite.pop();
-		co_resume( co->co );
+		co_resume( co->co );	// 此时执行权会转移到某个线程，直到它交出cpu，当前协程才会再次执行
 	}
 	return 0;
 }
@@ -239,14 +251,17 @@ int main(int argc,char *argv[])
 			task_t * task = (task_t*)calloc( 1,sizeof(task_t) );
 			task->fd = -1;
 
+			//主进程执行cnt次循环，来启动cnt个协程。
+			//每次调用co_resume时，主进程便会挂起，直到被激活运行的协程执行到某个步骤后，它主动放弃CPU，把执行权再次交给主进程。
 			co_create( &(task->co),NULL,readwrite_routine,task );
 			co_resume( task->co );
 
 		}
 		stCoRoutine_t *accept_co = NULL;
-		co_create( &accept_co,NULL,accept_routine,0 );
-		co_resume( accept_co );
+		co_create( &accept_co,NULL,accept_routine,0 );	// 启动一个协程专门做accept
+		co_resume( accept_co );		// accept协程会一直接受新连接，直到它交出执行权，才会重新回到主进程
 
+		//主进程中通过co_eventloop来调度事件来驱动各个协程的处理
 		co_eventloop( co_get_epoll_ct(),0,0 );
 
 		exit(0);

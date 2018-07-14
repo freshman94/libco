@@ -33,8 +33,8 @@
 struct co_epoll_res
 {
 	int size;
-	struct epoll_event *events;
-	struct kevent *eventlist;
+	struct epoll_event *events;		// for linux epoll
+	struct kevent *eventlist;		// for Unix or MacOs kqueue
 };
 int 	co_epoll_wait( int epfd,struct co_epoll_res *events,int maxevents,int timeout );
 int 	co_epoll_ctl( int epfd,int op,int fd,struct epoll_event * );

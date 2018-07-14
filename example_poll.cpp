@@ -117,6 +117,9 @@ static void *poll_routine( void *arg )
 		SetNonBlock( fd );
 		v[i].fd = fd;
 
+		//当我们以非阻塞的方式来进行连接的时候，返回的结果如果是 -1,这并不代表这次连接发生了错误，
+		//如果它的返回结果是 EINPROGRESS，那么就代表连接还在进行中。 
+		//后面可以通过poll或者select来判断socket是否可写，如果可以写，说明连接完成了。
 		int ret = connect(fd,(struct sockaddr*)&v[i].addr,sizeof( v[i].addr )); 
 		printf("co %p connect i %ld ret %d errno %d (%s)\n",
 			co_self(),i,ret,errno,strerror(errno));

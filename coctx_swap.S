@@ -16,11 +16,11 @@
 * limitations under the License.
 */
 
-.globl coctx_swap
+.globl coctx_swap		//.global 声明coctx_swap是全局可见的
 #if !defined( __APPLE__ ) && !defined( __FreeBSD__ )
-.type  coctx_swap, @function
+.type  coctx_swap, @function		//gnu汇编器定义函数时的规则
 #endif
-coctx_swap:
+coctx_swap:			//coctx_swap函数内容开始
 
 #if defined(__i386__)
 	leal 4(%esp), %eax //sp 

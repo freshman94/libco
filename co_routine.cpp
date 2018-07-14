@@ -50,9 +50,9 @@ struct stCoEpoll_t;
 
 struct stCoRoutineEnv_t
 {
-	stCoRoutine_t *pCallStack[ 128 ];
-	int iCallStackSize;
-	stCoEpoll_t *pEpoll;
+	stCoRoutine_t *pCallStack[ 128 ];	// 协程栈，保存同时存在的所有协程，栈顶是当前的协程
+	int iCallStackSize;					// 栈顶，指向当前协程的下一个位置（记录当前一共创建了多少个协程）
+	stCoEpoll_t *pEpoll;				// 所有协程公用的epoll实例
 
 	//for copy stack log lastco and nextco
 	stCoRoutine_t* pending_co;
@@ -268,16 +268,23 @@ void inline Join( TLink*apLink,TLink *apOther )
 /////////////////for copy stack //////////////////////////
 stStackMem_t* co_alloc_stackmem(unsigned int stack_size)
 {
+	/***
+	*  分配共享栈内存
+	*/
 	stStackMem_t* stack_mem = (stStackMem_t*)malloc(sizeof(stStackMem_t));
-	stack_mem->occupy_co= NULL;
+	stack_mem->occupy_co= NULL;		 // 正使用该共享栈的协程(初始为空)
 	stack_mem->stack_size = stack_size;
-	stack_mem->stack_buffer = (char*)malloc(stack_size);
-	stack_mem->stack_bp = stack_mem->stack_buffer + stack_size;
+	stack_mem->stack_buffer = (char*)malloc(stack_size);	// 给该共享栈分配存储空间
+	stack_mem->stack_bp = stack_mem->stack_buffer + stack_size;	// 更新栈基址
 	return stack_mem;
 }
 
 stShareStack_t* co_alloc_sharestack(int count, int stack_size)
 {
+	/***
+	* count: 共享栈的数目
+	* stack_size: 共享栈的大小
+	*/
 	stShareStack_t* share_stack = (stShareStack_t*)malloc(sizeof(stShareStack_t));
 	share_stack->alloc_idx = 0;
 	share_stack->stack_size = stack_size;
@@ -287,7 +294,7 @@ stShareStack_t* co_alloc_sharestack(int count, int stack_size)
 	stStackMem_t** stack_array = (stStackMem_t**)calloc(count, sizeof(stStackMem_t*));
 	for (int i = 0; i < count; i++)
 	{
-		stack_array[i] = co_alloc_stackmem(stack_size);
+		stack_array[i] = co_alloc_stackmem(stack_size);	//co_alloc_stackmem用于分配共享栈内存
 	}
 	share_stack->stack_array = stack_array;
 	return share_stack;
@@ -295,6 +302,9 @@ stShareStack_t* co_alloc_sharestack(int count, int stack_size)
 
 static stStackMem_t* co_get_stackmem(stShareStack_t* share_stack)
 {
+	/***
+	* 分配共享栈
+	*/
 	if (!share_stack)
 	{
 		return NULL;
@@ -311,16 +321,16 @@ struct stTimeoutItemLink_t;
 struct stTimeoutItem_t;
 struct stCoEpoll_t
 {
-	int iEpollFd;
-	static const int _EPOLL_SIZE = 1024 * 10;
+	int iEpollFd;								// Epoll 主 FD
+	static const int _EPOLL_SIZE = 1024 * 10;	// Epoll 可以监听的句柄总数
 
-	struct stTimeout_t *pTimeout;
+	struct stTimeout_t *pTimeout;				// 时间轮定时器
 
-	struct stTimeoutItemLink_t *pstTimeoutList;
+	struct stTimeoutItemLink_t *pstTimeoutList;	//用于临时存放超时事件的item
 
-	struct stTimeoutItemLink_t *pstActiveList;
+	struct stTimeoutItemLink_t *pstActiveList;	// 用于存放epoll_wait得到的就绪事件和定时器超时事件
 
-	co_epoll_res *result; 
+	co_epoll_res *result;						// Epoll 返回的事件结果
 
 };
 typedef void (*OnPreparePfn_t)( stTimeoutItem_t *,struct epoll_event &ev, stTimeoutItemLink_t *active );
@@ -442,16 +452,16 @@ inline void TakeAllTimeout( stTimeout_t *apTimeout,unsigned long long allNow,stT
 
 }
 static int CoRoutineFunc( stCoRoutine_t *co,void * )
-{
-	if( co->pfn )
+{									// 此时位于协程(co)的栈内存中
+	if( co->pfn )		
 	{
-		co->pfn( co->arg );
+		co->pfn( co->arg );			// 执行回调，直到结束或者主动挂起
 	}
-	co->cEnd = 1;
+	co->cEnd = 1;					// 回调执行结束
 
 	stCoRoutineEnv_t *env = co->env;
 
-	co_yield_env( env );
+	co_yield_env( env );			// 当前协程执行完之后，将协程切换为下一个协程（协程执行序列维护在线程上下文中）
 
 	return 0;
 }
@@ -469,14 +479,14 @@ struct stCoRoutine_t *co_create_env( stCoRoutineEnv_t * env, const stCoRoutineAt
 	}
 	if( at.stack_size <= 0 )
 	{
-		at.stack_size = 128 * 1024;
+		at.stack_size = 128 * 1024;		// 默认栈内存大小128k， 主协程使用默认栈大小
 	}
-	else if( at.stack_size > 1024 * 1024 * 8 )
+	else if( at.stack_size > 1024 * 1024 * 8 )	// 最大栈内存大小8M
 	{
 		at.stack_size = 1024 * 1024 * 8;
 	}
 
-	if( at.stack_size & 0xFFF ) 
+	if( at.stack_size & 0xFFF )		// 对栈内存大小进行16位对齐
 	{
 		at.stack_size &= ~0xFFF;
 		at.stack_size += 0x1000;
@@ -486,31 +496,34 @@ struct stCoRoutine_t *co_create_env( stCoRoutineEnv_t * env, const stCoRoutineAt
 	
 	memset( lp,0,(long)(sizeof(stCoRoutine_t))); 
 
-
-	lp->env = env;
-	lp->pfn = pfn;
-	lp->arg = arg;
+	lp->env = env;		// 协程的线程上下文
+	lp->pfn = pfn;		// 协程的回调函数
+	lp->arg = arg;		// 协程的回调函数参数
 
 	stStackMem_t* stack_mem = NULL;
+	// 分配共享栈
 	if( at.share_stack )
 	{
-		stack_mem = co_get_stackmem( at.share_stack);
-		at.stack_size = at.share_stack->stack_size;
+		stack_mem = co_get_stackmem( at.share_stack);	// 使用共享栈的时候，从共享栈中获取一块内存
+														// 作为当前协程的栈内存，栈内存其实使用的是堆内存
+		at.stack_size = at.share_stack->stack_size;		// 此时栈内存大小由共享栈决定
 	}
 	else
 	{
-		stack_mem = co_alloc_stackmem(at.stack_size);
+		stack_mem = co_alloc_stackmem(at.stack_size);	// 不使用共享栈的时候，从堆中创建一块内存作为当前协程的栈内存
 	}
 	lp->stack_mem = stack_mem;
 
-	lp->ctx.ss_sp = stack_mem->stack_buffer;
-	lp->ctx.ss_size = at.stack_size;
+	// 每个协程拥有128KB的私有栈
+	lp->ctx.ss_sp = stack_mem->stack_buffer;			// 协程上下文保存栈内存起始地址
+	lp->ctx.ss_size = at.stack_size;					// 协程上下文保存栈内存大小
 
-	lp->cStart = 0;
-	lp->cEnd = 0;
-	lp->cIsMain = 0;
-	lp->cEnableSysHook = 0;
-	lp->cIsShareStack = at.share_stack != NULL;
+
+	lp->cStart = 0;										//上下文还未初始化（coctx_make执行初始化）
+	lp->cEnd = 0;										//回调函数未执行
+	lp->cIsMain = 0;									//不是主线程
+	lp->cEnableSysHook = 0;								// 默认不启用系统函数hook
+	lp->cIsShareStack = at.share_stack != NULL;			// 设置是否使用共享栈的标记
 
 	lp->save_size = 0;
 	lp->save_buffer = NULL;
@@ -520,7 +533,7 @@ struct stCoRoutine_t *co_create_env( stCoRoutineEnv_t * env, const stCoRoutineAt
 
 int co_create( stCoRoutine_t **ppco,const stCoRoutineAttr_t *attr,pfn_co_routine_t pfn,void *arg )
 {
-	if( !co_get_curr_thread_env() ) 
+	if( !co_get_curr_thread_env() )		// 线程环境,在该进程的第一个协程创建的时候进行创建
 	{
 		co_init_curr_thread_env();
 	}
@@ -544,17 +557,18 @@ void co_release( stCoRoutine_t *co )
 
 void co_swap(stCoRoutine_t* curr, stCoRoutine_t* pending_co);
 
+// 协程执行
 void co_resume( stCoRoutine_t *co )
 {
 	stCoRoutineEnv_t *env = co->env;
-	stCoRoutine_t *lpCurrRoutine = env->pCallStack[ env->iCallStackSize - 1 ];
-	if( !co->cStart )
+	stCoRoutine_t *lpCurrRoutine = env->pCallStack[ env->iCallStackSize - 1 ];	// 获取当前协程， 即调用该函数的协程
+	if( !co->cStart )	// 初始化新协程的寄存器状态，新协程上下文的返回地址是对回调函数的封装
 	{
 		coctx_make( &co->ctx,(coctx_pfn_t)CoRoutineFunc,co,0 );
 		co->cStart = 1;
 	}
-	env->pCallStack[ env->iCallStackSize++ ] = co;
-	co_swap( lpCurrRoutine, co );
+	env->pCallStack[ env->iCallStackSize++ ] = co;	// 将新协程入栈
+	co_swap( lpCurrRoutine, co );	// 协程切换：当前协程挂起，保存状态， 切换到新协程
 
 
 }
@@ -566,7 +580,7 @@ void co_yield_env( stCoRoutineEnv_t *env )
 
 	env->iCallStackSize--;
 
-	co_swap( curr, last);
+	co_swap( curr, last);		// 当前协程执行完之后，将协程切换为协程栈中的下一个协程
 }
 
 void co_yield_ct()
@@ -581,50 +595,67 @@ void co_yield( stCoRoutine_t *co )
 
 void save_stack_buffer(stCoRoutine_t* occupy_co)
 {
-	///copy out
+	/***
+	* 实现协程数据的copy out
+	*/
 	stStackMem_t* stack_mem = occupy_co->stack_mem;
-	int len = stack_mem->stack_bp - occupy_co->stack_sp;
+	int len = stack_mem->stack_bp - occupy_co->stack_sp; // 需要拷贝的数据长度
 
 	if (occupy_co->save_buffer)
 	{
+		// 释放先前保存的内存数据
 		free(occupy_co->save_buffer), occupy_co->save_buffer = NULL;
 	}
 
 	occupy_co->save_buffer = (char*)malloc(len); //malloc buf;
 	occupy_co->save_size = len;
 
+	// 栈是向下增长的, 所以从stack_sp开始拷贝
+	// 此时, occupy_co还在共享栈上了(coctx_swap还没开始), 所以可以直接从stack_sp开始拷贝
 	memcpy(occupy_co->save_buffer, occupy_co->stack_sp, len);
 }
 
 void co_swap(stCoRoutine_t* curr, stCoRoutine_t* pending_co)
 {
+	/***
+	* 协程切换: curr --> pending_co
+	*/
+
  	stCoRoutineEnv_t* env = co_get_curr_thread_env();
 
 	//get curr stack sp
-	char c;
-	curr->stack_sp= &c;
+	char c;				// 在当前协程中申请一个字节的栈内存，此时压栈后寄存器 rsp指向该内存的地址
+	curr->stack_sp= &c;	// 从而记录当前协程 curr 的运行栈的栈顶指针
 
-	if (!pending_co->cIsShareStack)
+	if (!pending_co->cIsShareStack)		// 非共享栈的情况下，不需要保存占用共享栈的协程
 	{
 		env->pending_co = NULL;
 		env->occupy_co = NULL;
 	}
-	else 
+	else		// 共享栈情况下
 	{
-		env->pending_co = pending_co;
-		//get last occupy co on the same stack mem
-		stCoRoutine_t* occupy_co = pending_co->stack_mem->occupy_co;
-		//set pending co to occupy thest stack mem;
-		pending_co->stack_mem->occupy_co = pending_co;
+		
+		env->pending_co = pending_co;					// 保存当前占用共享栈的协程地址（新协程） 到 线程上下文 pending_co
 
-		env->occupy_co = occupy_co;
-		if (occupy_co && occupy_co != pending_co)
+		// pending_co和occupy_co共享stack_mem,
+		// 从pending_co中取出occupy_co是为了接下来的copy-on-write判断
+
+		//get last occupy co on the same stack mem
+		stCoRoutine_t* occupy_co = pending_co->stack_mem->occupy_co;	// 从新协程的共享栈中获取前一个占用该共享栈的协程地址
+		//set pending co to occupy thest stack mem;
+		pending_co->stack_mem->occupy_co = pending_co;	// 更新占用共享栈的协程地址为新协程
+
+		env->occupy_co = occupy_co;						// 保存前一个占用新协程共享栈的协程地址到线程上下文occupy_co
+		if (occupy_co && occupy_co != pending_co)		// 如果之前有协程占用共享栈 && 前一个协程不是新协程
 		{
+			// copy-on-write, 不是同一个协程时, 进行内存数据拷贝
+			// 将occupy_co协程的数据拷贝出共享栈(copy out)
 			save_stack_buffer(occupy_co);
 		}
 	}
 
 	//swap context
+	// 协程切换, coctx_swap是汇编函数
 	coctx_swap(&(curr->ctx),&(pending_co->ctx) );
 
 	//stack buffer may be overwrite, so get again;
@@ -635,6 +666,8 @@ void co_swap(stCoRoutine_t* curr, stCoRoutine_t* pending_co)
 	if (update_occupy_co && update_pending_co && update_occupy_co != update_pending_co)
 	{
 		//resume stack buffer
+		// copy-on-write, 不是同一个协程时, 进行内存数据拷贝
+		// 将pending_co协程的数据拷贝入共享栈(copy in)
 		if (update_pending_co->save_buffer && update_pending_co->save_size > 0)
 		{
 			memcpy(update_pending_co->stack_sp, update_pending_co->save_buffer, update_pending_co->save_size);
@@ -709,18 +742,20 @@ void co_init_curr_thread_env()
 	stCoRoutineEnv_t *env = g_arrCoEnvPerThread[ pid ];
 
 	env->iCallStackSize = 0;
-	struct stCoRoutine_t *self = co_create_env( env, NULL, NULL,NULL );
+	struct stCoRoutine_t *self = co_create_env( env, NULL, NULL,NULL );		// 主协程，在线程上下文创建的时候创建
 	self->cIsMain = 1;
 
 	env->pending_co = NULL;
 	env->occupy_co = NULL;
 
+	// 每个协程里有个coctx_t类型的成员，这个属于协程较底层的支撑信息(存储协程的上下文信息）
 	coctx_init( &self->ctx );
 
-	env->pCallStack[ env->iCallStackSize++ ] = self;
+	env->pCallStack[ env->iCallStackSize++ ] = self;		// 主协程放在协程栈的栈底
 
-	stCoEpoll_t *ev = AllocEpoll();
-	SetEpoll( env,ev );
+	
+	stCoEpoll_t *ev = AllocEpoll();		// 申请epoll结构
+	SetEpoll( env,ev );					// 与当前env绑定
 }
 stCoRoutineEnv_t *co_get_curr_thread_env()
 {
@@ -753,7 +788,7 @@ void OnPollPreparePfn( stTimeoutItem_t * ap,struct epoll_event &e,stTimeoutItemL
 	}
 }
 
-
+//epoll_wait监听–>等待事件–>处理I / O事件–>得到现在时间，判断是否超时–>处理超时事件。
 void co_eventloop( stCoEpoll_t *ctx,pfn_co_eventloop_t pfn,void *arg )
 {
 	if( !ctx->result )
@@ -787,7 +822,7 @@ void co_eventloop( stCoEpoll_t *ctx,pfn_co_eventloop_t pfn,void *arg )
 
 
 		unsigned long long now = GetTickMS();
-		TakeAllTimeout( ctx->pTimeout,now,timeout );
+		TakeAllTimeout( ctx->pTimeout,now,timeout );//将时间轮上的超时事件取出，并且让时间轮向前滚动
 
 		stTimeoutItem_t *lp = timeout->head;
 		while( lp )
@@ -816,7 +851,7 @@ void co_eventloop( stCoEpoll_t *ctx,pfn_co_eventloop_t pfn,void *arg )
 			}
 			if( lp->pfnProcess )
 			{
-				lp->pfnProcess( lp );
+				lp->pfnProcess( lp );//处理active链上的事件
 			}
 
 			lp = active->head;

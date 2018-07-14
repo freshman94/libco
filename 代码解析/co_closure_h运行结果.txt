@@ -1,0 +1,33 @@
+//宏展开后，等效于下列代码
+
+int main()
+{
+	int a = 100;
+ 
+	typedef typeof(a) typeof_a; 
+	class type_ref 
+	{
+	public: 
+		typeof_a & a; 
+		int _member_cnt; 
+		type_ref(typeof_a & ar, ...) : a(ar), _member_cnt(1) 
+		{
+		} 
+	} ref(a);;
+ 
+	typedef typeof(ref) typeof_ref; 
+	class f : public stCoClosure_t 
+	{
+	public: 
+		typeof_ref ref; 
+		int _member_cnt; 
+	public: 
+		f(typeof_ref & refr, ...) : ref(refr), _member_cnt(1) 
+		{
+		} 
+		void exec()
+		{
+			printf("hello, world!\n");
+		}
+	};
+}
